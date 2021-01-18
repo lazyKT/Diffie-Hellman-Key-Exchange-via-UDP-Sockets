@@ -9,12 +9,11 @@ import java.io.*;
 
 class Utility {
 
-	public Utility() {
-
-  }
+	public Utility() {}
 
 
   // hash password using SHA-1 Alogorithm
+  // IN REAL WORLD, DO NOT EVER USE SHA-1.
   private String sha1Hash (String pwd) {
 
     String hashed_pwd = "";
@@ -56,18 +55,20 @@ class Utility {
   }
 
 
-	// generate G and P for Diffie-Hellman Alogorithm
-	private BigInteger[] generatePandG () {
-		Random rand = new Random();
+  // generate G and P for Diffie-Hellman Alogorithm
+  private BigInteger[] generatePandG () {
+    Random rand = new Random();
 
-		BigInteger P = BigInteger.probablePrime(1024, rand);
-		BigInteger G = BigInteger.probablePrime(1024, rand);
+    BigInteger P = BigInteger.probablePrime(1024, rand);
+    BigInteger G = BigInteger.probablePrime(1024, rand);
 
-		return new BigInteger[] {P, G};
-	}
+    return new BigInteger[] {P, G};
+  }
 
 
-  // Host Set up
+  // Host Set up: generating P and G
+  // saving password, P and G to file
+  // @return void
   public void hostSetUp () {
     BigInteger[] p_g = new BigInteger[2];
 
@@ -101,11 +102,12 @@ class Utility {
 
 
   // find mod value
-	public BigInteger findModulo(BigInteger P, BigInteger G, int m) {
-		
-		BigInteger ex = G.pow(m);
+  // @return BigInteger
+  public BigInteger findModulo(BigInteger P, BigInteger G, int m) {
+    
+    BigInteger ex = G.pow(m);
 
-		return ex.mod(P);
-	}
+    return ex.mod(P);
+  }
 
 }
