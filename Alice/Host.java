@@ -5,40 +5,12 @@
  * It is not secure anymore.
  */
 import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.math.BigInteger;
 import java.util.*;
-import java.net.*;
 
 
 class Host {
-
-  // Port Number
-  private static int PORT = 4455;
-
-
-  // clean up before exiing the program
-  // closing streams and terminating sockets
-  private static void cleanUp (PrintStream printStream, BufferedReader kb_bufferedReader, BufferedReader r_bufferedReader, Socket socket, ServerSocket serversocket) {
-
-    try {
-      // close all the streams and socket
-      System.out.println("Terminating Socket Connections ...");
-      r_bufferedReader.close();
-      kb_bufferedReader.close();
-      printStream.close();
-      socket.close();
-      serversocket.close();
-
-      System.out.println("Exiting Program ...");
-      // Exit the program
-      System.exit(0);
-    }
-    catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
 
 
   public static void main(String[] args) throws Exception {
@@ -61,37 +33,51 @@ class Host {
     BigInteger P = new BigInteger(secret_values.get(1));
     BigInteger G = new BigInteger(secret_values.get(2));
 
-    System.out.println("Creating New Socket Connection ...");
-    ServerSocket serversocket = new ServerSocket(PORT);
-    Socket socket = serversocket.accept();
-    System.out.printf("Socket Connection Established. Listening at PORT:%d ...\n", PORT);
-
-    // read buffer string from client
-    PrintStream printStream = new PrintStream(socket.getOutputStream());
-
-    // read from keyborad
-    BufferedReader kb_bufferedReader = new BufferedReader(new InputStreamReader(System.in));
     
-    // receive buffer string from client
-    BufferedReader r_bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+    SetUp host_setup = new SetUp(hashed_pwd, P, G);
+    PrintStream printStream = host_setup.getPrintStream();
+    BufferedReader kb_bufferedReader = host_setup.getKeyBoardBufferedReader();
+    BufferedReader r_bufferedReader = host_setup.getReceiveBufferedReader();
+    
+    
 
     while(true) {
-      String r_message, s_message = "";
+      String r_message, s_message = ""; 
 
       // read/send message from/to the client
       while ( (r_message = r_bufferedReader.readLine()) != null) {
+      
         System.out.println("Client : " + r_message);
+        
+        if ( (r_message.toLowerCase()).equals("bob") ) {
+          // receive username
+          // return P, G and G^a mod P values in RC4 Stream Cihper
+          Random rand = new Random(System.currentTimeMillis());
+          BigInteger X = utility.findModulo(P, G, rand.nextInt(99999));
+
+          String cihper_string = new String("_cipher_," + P.toString() + "," + G.toString() + "," + X.toString());
+          
+          printStream.println(cihper_string + "\n");
+
+          continue;
+        }
+
+
+        if ( r_message.equals(".exit()") )
+          host_setup.terminateConnection();
 
         s_message = kb_bufferedReader.readLine();
-        if (s_message == null)
-          System.out.println("Receiving NULL Message. Breaking the loop ...");
         // send message to client
-        printStream.println("Server : " + s_message);
+        printStream.println(s_message);
 
-        if ((s_message.trim()).equals(".exit()"))
-          cleanUp(printStream, kb_bufferedReader, r_bufferedReader, socket, serversocket);
+        if ( s_message.equals(".exit()") )
+          host_setup.terminateConnection();
       }
-    
+
+      System.out.println("Outside Client Loop");
+   
+      if ( (s_message.trim()).equals(".exit()") )
+        host_setup.terminateConnection();
     }
   }
 }

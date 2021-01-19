@@ -45,6 +45,7 @@ class Client {
      * if there is not server listening at given PORT number 
      */
     Socket socket = new Socket(InetAddress.getLocalHost(), PORT);
+    System.out.println("Connected to Server at PORT:" + PORT);
 
     // send data to server
     DataOutputStream opts = new DataOutputStream(socket.getOutputStream());
@@ -56,13 +57,19 @@ class Client {
 
     String s_message, r_message;
 
-    s_message = kb_bufferedReader.readLine();
 
-    // as long as user don't exit the Program
-    while (s_message.equals(".exit()")) {
+    System.out.printf("Enter Username : ");
+
+    while (true) {
+      
+      s_message = kb_bufferedReader.readLine(); 
       
       // send message to server
-      opts.writeBytes(s_message);
+      opts.writeBytes(s_message + "\n");
+
+      if (s_message.equals(".exit()"))
+        break;
+
 
       // receive message from server
       r_message = r_bufferedReader.readLine();
