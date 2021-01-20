@@ -18,7 +18,7 @@ Implementing and Establishing the secure channel between two parties using Diffi
 
   $cd Bob
 
-  $ javac Client.java;java Client <port-number>
+  $ javac Client.java ClientSetUp.java;java Client <port-number>
 
 # Note
 
