@@ -12,7 +12,7 @@ Implementing and Establishing the secure channel between two parties using Diffi
 
   $ cd Alice
 
-  $ javac Host.java;java Host
+  $ javac Host.java SetUp.java;java Host
 
 -to run client
 

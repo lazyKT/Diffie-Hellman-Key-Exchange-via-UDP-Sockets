@@ -1,35 +1,91 @@
 import java.io.*;
+import java.util.*;
 import java.math.*;
 import java.net.*;
+import java.security.*;
+import javax.crypto.*;
+import java.nio.file.*;
+import java.nio.charset.*;
+import javax.crypto.spec.*;  
 
 
 public class SetUp {
     
     private static int PORT = 4455;
+    private final String secret = "ThisIsSecret123";
     private ServerSocket serverSocket;
     private Socket socket;
-    private PrintStream printStream;
+    private DataOutputStream outputStream;
     private BufferedReader kb_bufferedReader, r_bufferedReader;
-    private BigInteger P, G;
+    private DataInputStream inputStream;
+    private BigInteger P, G, X, Y, sharedKeyA;
     private String hashed_pwd;
+    private Cipher cipher;
+    private SecretKey secretKey;
 
 
-    public SetUp(String hashed_pwd, BigInteger P, BigInteger G) throws Exception {
+    public SetUp() throws Exception {
 
-        this.hashed_pwd = hashed_pwd;
-        this.G = G;
-        this.P = P;
+        System.out.println("\nCreating New Server ... /");
+        Random random = new Random(System.currentTimeMillis());
+        
+        System.out.println("Loading Configuration ... |");
+        this.P = BigInteger.probablePrime(128, random);
+        this.G = BigInteger.probablePrime(128, random);
+        this.hashed_pwd = sha1Hash(this.secret);
 
-        System.out.println("Creating New Socket Connection ...");
-        this.serverSocket = new ServerSocket(4455);
-        System.out.println("Waiting for the client to connect ... ");
-        this.socket = serverSocket.accept();
-        System.out.printf("Socket Connection Established. Listening at PORT:%d ...\n", PORT);
+        this.saveToFile(Arrays.asList(this.hashed_pwd, (this.P).toString(), (this.G).toString()));
 
-        this.printStream = new PrintStream(this.socket.getOutputStream());
-        this.kb_bufferedReader = new BufferedReader(new InputStreamReader(System.in));
-        // receive buffer string from client
-        this.r_bufferedReader = new BufferedReader(new InputStreamReader(this.socket.getInputStream()));
+    }
+
+
+    /**
+     * Read Configurations from file
+     */
+    public void readConfigs () {
+        System.out.println("Reading Configurations ....\\");
+        try {
+            Path file = Paths.get("secret.txt");
+            List<String> lines = Files.readAllLines(file);
+
+            this.hashed_pwd = lines.get(0);
+            this.P = new BigInteger(lines.get(1));
+            this.G = new BigInteger(lines.get(2));
+        
+        }
+            catch (IOException ie) {
+            throw new RuntimeException(ie);
+        }
+    }
+
+
+    /**
+     * Initialise socket connection
+     * 
+     * @return void
+     */
+    public void initConnection() {
+        
+        try {
+            System.out.println("\nCreating New Socket Connection ... \\\n");
+            this.serverSocket = new ServerSocket(4455);
+            System.out.println("Waiting for the client to connect ... |\n");
+            this.socket = serverSocket.accept();
+            System.out.printf("Socket Connection Established. Listening at PORT:%d\n", PORT);
+
+            this.outputStream = new DataOutputStream(this.socket.getOutputStream());
+            this.kb_bufferedReader = new BufferedReader(new InputStreamReader(System.in));
+            this.inputStream = new DataInputStream(this.socket.getInputStream());
+            // receive and read buffer string from client
+            this.r_bufferedReader = new BufferedReader(new InputStreamReader(this.socket.getInputStream()));
+
+            this.cipher = Cipher.getInstance("ARCFOUR");
+            // generate secretkey for first handshake session
+            generateSecretKey(this.hashed_pwd);
+        }
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
 
@@ -39,7 +95,7 @@ public class SetUp {
 
     public BigInteger getG() { return this.G; }
 
-    public PrintStream getPrintStream() { return this.printStream; }
+    public DataOutputStream getPrintStream() { return this.outputStream; }
 
     public BufferedReader getKeyBoardBufferedReader() { return this.kb_bufferedReader; }
 
@@ -47,15 +103,199 @@ public class SetUp {
 
 
     // perform handshake to establish secure channel
-    public void performHandShake() {
+    public void performHandShake() throws Exception {
         
+        String r_message = this.r_bufferedReader.readLine();
+
+        if (r_message != null && (r_message.toLowerCase()).equals("bob") ) {
+            // perform handshake
+            System.out.println("Client Username : " + r_message);
+            System.out.println("\nPerforming first handshake .... /\n");
+
+            Random rand = new Random(System.currentTimeMillis());
+            int a = rand.nextInt(999);
+            this.X = this.findModulo(this.G, a);
+            String firstHandShakeStr = String.format("%s,%s,%s",  (this.P).toString(), (this.G).toString(), X.toString());
+            
+            // send P, G, X 
+            this.sendEncryptedMessage(firstHandShakeStr);
+            
+            // receive Y
+            String decrypted_Y = this.receiveAndDecryptMessage();
+            this.Y = new BigInteger(decrypted_Y);
+            System.out.println("First HandShake Success!\n");
+
+            this.sharedKeyA = this.findModulo(Y, a);
+
+            // generate secret key using Shared Key
+            generateSecretKey((this.sharedKeyA).toString());
+
+            long nounceA = System.nanoTime();
+            System.out.println("Performing Second HandShake ... |\n");
+
+            // send nounceA
+            sendEncryptedMessage(String.valueOf(nounceA));
+            
+            String nounces[] = this.receiveAndDecryptMessage().split(",");
+            if (nounces.length < 2)
+                throw new RuntimeException("Error receiving NounceA + 1");
+            
+            long noucneA_plusOne = Long.parseLong(nounces[0]);
+            long nounceB = Long.parseLong(nounces[1]);
+            // System.out.println(x);
+            if ( (nounceA + 1) != noucneA_plusOne ) {
+                // login failed and terminate connection
+                sendEncryptedMessage("Login Failed");
+                System.out.println("\nClient Login Failed!");
+                System.out.println("\nPress Enter to Exit!\n");
+                (this.kb_bufferedReader).readLine();
+                this.terminateConnection();
+            }
+            System.out.println("Second HandShake Success!\n");
+            System.out.println("Performing Final HandShake ... /\n");
+            // send nounceB
+            sendEncryptedMessage(String.valueOf(nounceB + 1));
+            
+            int finalHandShakeResult = (this.inputStream).readInt();
+
+            if (finalHandShakeResult == 200) {
+                System.out.println("Final HandShake Success!\n");
+                System.out.println("Secure Channel Established! :)\n");
+            }
+        }
+
+    }
+
+
+    /**
+     * Hash Password using SHA-1 algorithm: Length - 64bits
+     * DO NOT USE SHA-1 IN REAL WORLD CASE.
+     * @param pwd
+     * @return String
+     */
+    private String sha1Hash (String pwd) {
+
+        String hashed_pwd = "";
+
+        try {
+        MessageDigest md = MessageDigest.getInstance("SHA-1");
+
+        // convert String to bytes arry
+        byte[] pwd_bytes = md.digest(pwd.getBytes());
+
+        // convert byte array to signum value
+        BigInteger signum_val = new BigInteger(1, pwd_bytes);
+
+        hashed_pwd = signum_val.toString();
+
+        // fill "0"s to get 64-bit length
+        while ( hashed_pwd.length() < 64 )
+            hashed_pwd = "0" + hashed_pwd;
+
+        }
+        catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+
+        return hashed_pwd;
+    }
+
+    // save password, P and G values to File
+    private void saveToFile (List<String> lines) {
+
+        try {
+        Path filepath = Paths.get("secret.txt");
+        Files.write(filepath, lines, StandardCharsets.UTF_8);
+        }
+        catch (IOException e) {
+        throw new RuntimeException(e);
+        }
+    }
+
+
+    /** 
+     * find mod value
+     * @return BigInteger
+     */
+    private BigInteger findModulo(BigInteger x, int m) {
+        
+        BigInteger ex = x.pow(m);
+
+        return ex.mod(this.P);
+    }
+
+
+    public String receiveAndDecryptMessage() throws Exception {
+
+        int message_len = (this.inputStream).readInt();
+        byte[] encrypted_message = new byte[message_len];
+        (this.inputStream).readFully(encrypted_message, 0, encrypted_message.length);
+
+        return this.decrypt(encrypted_message);
+    }
+
+
+    public void sendEncryptedMessage(String message) throws Exception {
+
+        byte[] encrypted_message = encrypt(message);
+        //System.out.println("Encrypted Message : " + encrypted_message);
+
+        (this.outputStream).writeInt(message.length());
+        (this.outputStream).write(encrypted_message);
+    }
+
+
+    /**
+     * Generate Secret Key
+     * @return SecretKey
+     */
+    private void generateSecretKey(String secret) throws Exception {
+        // if secret doesn't long 64-bit, padd with zero at the beginning
+        // System.out.println("Secert Length : " + secret.length());
+        while (secret.length() < 64)
+            secret = "0" + secret;
+        
+        byte[] secret_bytes = Base64.getDecoder().decode(secret);
+        // System.out.println("Secret key length " + secret_bytes.length);
+        this.secretKey = new SecretKeySpec(secret_bytes, 0, secret_bytes.length, "ARCFOUR");
+    }
+
+
+    /**
+     * Encrypt Message using RC-4
+     * @param message
+     * @param key
+     * @param cipher
+     * @return byte[]
+     * @throws Exception
+     */
+    private byte[] encrypt(String message) throws Exception {
+
+        this.cipher.init(Cipher.ENCRYPT_MODE, this.secretKey);
+        byte[] message_bytes = message.getBytes();
+        
+        return cipher.doFinal(message_bytes);
+    }
+
+
+    /**
+     * Decrypt Message
+     * @return String
+     */
+    private String decrypt(byte[] encrypted_bytes) throws Exception {
+
+        this.cipher.init(Cipher.DECRYPT_MODE, this.secretKey);
+        byte[] decrypted_bytes = cipher.doFinal(encrypted_bytes);
+
+        return new String(decrypted_bytes);
     }
 
 
     public void terminateConnection () throws Exception {
-        this.printStream.close();
+        this.outputStream.close();
         this.r_bufferedReader.close();
         this.kb_bufferedReader.close();
+        this.inputStream.close();
         this.socket.close();
         this.serverSocket.close();
     }
