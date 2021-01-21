@@ -12,6 +12,8 @@ import javax.crypto.spec.*;
 public class SetUp {
     
     private static int PORT = 4455;
+    private final String CLIENT_TEXT_COLOR = "\u001B[36m"; // cyan
+    private final String DEFAULT_COLOR = "\u001B[0m"; // default color
     private final String secret = "ThisIsSecret123";
     private ServerSocket serverSocket;
     private Socket socket;
@@ -26,10 +28,10 @@ public class SetUp {
 
     public SetUp() throws Exception {
 
-        System.out.println("\nCreating New Server ... /");
+        this.showText("\nCreating New Server ... /", "info");
         Random random = new Random(System.currentTimeMillis());
         
-        System.out.println("Loading Configuration ... |");
+        this.showText("Loading Configuration ... |", "info");
         this.P = BigInteger.probablePrime(128, random);
         this.G = BigInteger.probablePrime(128, random);
         this.hashed_pwd = sha1Hash(this.secret);
@@ -38,12 +40,30 @@ public class SetUp {
 
     }
 
+    // // run in background thread
+    // public void run () {
+    //     try {
+
+    //         while (true) {
+    //             String receiveMessage = this.receiveAndDecryptMessage();
+    //             this.showText(new String("Client : " + receiveMessage), "message");
+
+    //             if (receiveMessage.equals("exit"))
+    //                 break;
+    //         }
+
+    //     }   
+    //     catch (Exception e) {
+    //         throw new RuntimeException(e);
+    //     }
+    // }
+
 
     /**
      * Read Configurations from file
      */
     public void readConfigs () {
-        System.out.println("Reading Configurations ....\\");
+        this.showText("Reading Configurations ....\\", "info");
         try {
             Path file = Paths.get("secret.txt");
             List<String> lines = Files.readAllLines(file);
@@ -67,11 +87,11 @@ public class SetUp {
     public void initConnection() {
         
         try {
-            System.out.println("\nCreating New Socket Connection ... \\\n");
+            this.showText("\nCreating New Socket Connection ... \\\n", "info");
             this.serverSocket = new ServerSocket(4455);
             System.out.println("Waiting for the client to connect ... |\n");
             this.socket = serverSocket.accept();
-            System.out.printf("Socket Connection Established. Listening at PORT:%d\n", PORT);
+            this.showText(String.format("Socket Connection Established. Listening at PORT:%d\n", PORT), "info");
 
             this.outputStream = new DataOutputStream(this.socket.getOutputStream());
             this.kb_bufferedReader = new BufferedReader(new InputStreamReader(System.in));
@@ -89,17 +109,8 @@ public class SetUp {
     }
 
 
-    public String getHashed_Pwd() { return this.hashed_pwd; }
-
-    public BigInteger getP() { return this.P; }
-
-    public BigInteger getG() { return this.G; }
-
-    public DataOutputStream getPrintStream() { return this.outputStream; }
-
     public BufferedReader getKeyBoardBufferedReader() { return this.kb_bufferedReader; }
-
-    public BufferedReader getReceiveBufferedReader() { return this.r_bufferedReader; }
+    public DataInputStream getInputStream() { return this.inputStream; }
 
 
     // perform handshake to establish secure channel
@@ -160,7 +171,7 @@ public class SetUp {
 
             if (finalHandShakeResult == 200) {
                 System.out.println("Final HandShake Success!\n");
-                System.out.println("Secure Channel Established! :)\n");
+                System.out.println("Secure Channel Established! :)\nYou can start to send message over secure channel.\nTry to type \"Hello Client\"\n");
             }
         }
 
@@ -291,13 +302,25 @@ public class SetUp {
     }
 
 
+    // text decoration
+    private void showText(String message, String type) {
+        if (type.equals("info")) 
+            System.out.println(this.DEFAULT_COLOR + message + this.DEFAULT_COLOR);
+        else 
+        System.out.println(this.CLIENT_TEXT_COLOR + message + this.CLIENT_TEXT_COLOR);
+    }
+
+
     public void terminateConnection () throws Exception {
+        System.out.println("\nTerminating Socket connections ...");
         this.outputStream.close();
         this.r_bufferedReader.close();
         this.kb_bufferedReader.close();
         this.inputStream.close();
         this.socket.close();
         this.serverSocket.close();
+        System.out.println("Exiting Program ...");
+        System.exit(0);
     }
 
 }

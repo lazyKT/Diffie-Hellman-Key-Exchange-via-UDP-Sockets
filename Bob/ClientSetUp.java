@@ -3,6 +3,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.Random;
+import java.util.Scanner;
 
 import javax.crypto.Cipher;
 import javax.crypto.SealedObject;
@@ -11,15 +12,18 @@ import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
 import java.math.BigInteger;
 
+/** Clinet Socket Connection Setup */
 
 public class ClientSetUp {
 
     private final String secret = "ThisIsSecret123";
+    private final String RECEIVE_TEXT_COLOR = "\u001B[36m"; // cyan
+    private final String DEFAULT_COLOR = "\u001B[0m"; // default color
     private BigInteger P, G, X, Y, sharedKeyB;
     private Socket socket;
-    private BufferedReader kb_bufferedReader;
-    private DataInputStream inputStream;
-    private DataOutputStream outputStream;
+    private BufferedReader kb_bufferedReader; // read from keyboard input
+    private DataInputStream inputStream; // read from socket
+    private DataOutputStream outputStream; // write to socket
     private Cipher cipher;
     private SecretKey secretKey;
 
@@ -30,7 +34,36 @@ public class ClientSetUp {
         System.out.println("Connected to the Host at PORT:" + Port);
 
         this.cipher = Cipher.getInstance("ARCFOUR");
+        this.outputStream = new DataOutputStream(this.socket.getOutputStream());
+        this.kb_bufferedReader = new BufferedReader(new InputStreamReader(System.in));
+        this.inputStream = new DataInputStream(this.socket.getInputStream());
+
+        generatSecretKey(sha1Hash());
     }
+
+
+    // start thread
+    // public void run() {
+    //     try {
+
+    //         // listening to server and receive messages
+    //         // System.out.println("Listening to server on background thread!");
+    //         while(true) {
+    //             String receiveMessage = "";
+    //             if (this.inputStream.available() > 0) {
+    //                 receiveMessage = this.receiveAndDecryptMessage();
+    //                 System.out.println(this.RECEIVE_TEXT_COLOR + "Host : " + receiveMessage + this.RECEIVE_TEXT_COLOR);
+    //             }
+
+    //             if (receiveMessage.equals("exit"))
+    //                 break;
+    //         }
+        
+    //     }
+    //     catch (Exception e) {
+    //         throw new RuntimeException(e);
+    //     }
+    // }
 
 
     public void init() throws Exception{
@@ -105,7 +138,7 @@ public class ClientSetUp {
 
         System.out.println("Final HandShake Success!\n");
         (this.outputStream).writeInt(200); // response to server or Host
-        System.out.println("Secure Channel Established ! :D\n");
+        System.out.println("Secure Channel Established ! :D\nYou can start to send message over secure channel.\nTry to type \"Hello Server\"\n");
     }
 
 
@@ -191,17 +224,26 @@ public class ClientSetUp {
         return ex.mod(this.P);
     }
 
+    
+    // text decoration
+    private void showText(String message, String type) {
+        if (type.equals("info")) 
+            System.out.println(this.DEFAULT_COLOR + message + this.DEFAULT_COLOR);
+        else 
+        System.out.println(this.RECEIVE_TEXT_COLOR + message + this.RECEIVE_TEXT_COLOR);
+    }
+
 
     public void terminateConnection() {
         try {
             // close connection
-            System.out.println("Terminating Socket connections ...");
+            System.out.println("\nTerminating Socket connections ...");
             (this.kb_bufferedReader).close();
             (this.inputStream).close();
             (this.outputStream).close();
             (this.socket).close();
             System.out.println("Exiting Program ...");
-            System.exit(1);
+            System.exit(0);
         }
         catch (Exception e) {
             throw new RuntimeException("Error closing socket connection!");

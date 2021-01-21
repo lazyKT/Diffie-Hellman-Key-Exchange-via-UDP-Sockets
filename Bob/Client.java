@@ -20,27 +20,65 @@ class Client {
     PORT = Integer.parseInt(args[0]);
 
     ClientSetUp setUp = new ClientSetUp(PORT);
-    setUp.init();
-    setUp.performHandShake();
-
     BufferedReader kb_bufferedReader = setUp.getBufferedReader();
-    String r_message, s_message;
+    DataInputStream inputStream = setUp.getInputStream();
+    
+    setUp.performHandShake();
+    // setUp.setDaemon(true); // daemon thread
+    // setUp.start();
+    
+    // String s_message;
+
+    // while(setUp.isAlive()) {
+      
+    //   // when Host is exited the program
+    //   while (!kb_bufferedReader.ready()) {
+    //     Thread.sleep(500);
+
+    //     // if background job is finished, aka host terminate the connection
+    //     if (!setUp.isAlive()) 
+    //       setUp.terminateConnection();
+          
+    //   }
+        
+    //   // send message
+    //   s_message = kb_bufferedReader.readLine();
+    //   setUp.sendEncryptedMessage(s_message);
+
+    //   if (s_message.equals("exit"))
+    //     break;
+
+    // }
+    
 
     while (true) {
-      s_message = kb_bufferedReader.readLine();
-      setUp.sendEncryptedMessage(s_message);
+      String s_message = ""; 
+      String r_message = "";
 
-      if (s_message.equals(".exit()"))
+      while ( !kb_bufferedReader.ready() ) {
+
+        while ( inputStream.available() > 0 ) {
+
+          r_message = setUp.receiveAndDecryptMessage();
+          System.out.println("Host : " + r_message);
+
+          if (r_message.equals("exit"))
+            setUp.terminateConnection();
+        }
+      }
+
+      if (kb_bufferedReader.ready()) {
+        s_message = kb_bufferedReader.readLine();
+        setUp.sendEncryptedMessage(s_message);
+      }
+            
+
+      if (s_message.equals("exit"))
         break;
-
-      r_message = setUp.receiveAndDecryptMessage();
-      System.out.println("Host : " + r_message);
-
-      if (r_message.equals(".exit()"))
-        break;
-    }
-
+    }  
+    
     setUp.terminateConnection();
 
   }
 }
+
