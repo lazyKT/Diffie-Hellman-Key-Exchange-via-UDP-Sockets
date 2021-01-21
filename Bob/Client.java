@@ -8,6 +8,11 @@ import java.net.*;
 class Client {
 
 
+  private static final String RECEIVE_TEXT_COLOR = "\u001B[36m"; // cyan
+  private static final String DEFAULT_COLOR = "\u001B[0m"; // default color
+  public static final String SEND_TEXT_COLOR = "\u001B[35m"; // purple
+  private static final String ERROR_TEXT_COLOR = "\u001B[31m";
+
   public static void main (String args[]) throws Exception {
 
     int PORT = 0;
@@ -24,59 +29,46 @@ class Client {
     DataInputStream inputStream = setUp.getInputStream();
     
     setUp.performHandShake();
-    // setUp.setDaemon(true); // daemon thread
-    // setUp.start();
-    
-    // String s_message;
 
-    // while(setUp.isAlive()) {
-      
-    //   // when Host is exited the program
-    //   while (!kb_bufferedReader.ready()) {
-    //     Thread.sleep(500);
-
-    //     // if background job is finished, aka host terminate the connection
-    //     if (!setUp.isAlive()) 
-    //       setUp.terminateConnection();
-          
-    //   }
-        
-    //   // send message
-    //   s_message = kb_bufferedReader.readLine();
-    //   setUp.sendEncryptedMessage(s_message);
-
-    //   if (s_message.equals("exit"))
-    //     break;
-
-    // }
-    
-
+    System.out.print(SEND_TEXT_COLOR + "\n" + SEND_TEXT_COLOR);
     while (true) {
       String s_message = ""; 
       String r_message = "";
-
+      
       while ( !kb_bufferedReader.ready() ) {
 
         while ( inputStream.available() > 0 ) {
 
-          r_message = setUp.receiveAndDecryptMessage();
-          System.out.println("Host : " + r_message);
+          r_message = setUp.receiveMessage();
 
-          if (r_message.equals("exit"))
-            setUp.terminateConnection();
+          if (r_message != null) {
+            System.out.print(RECEIVE_TEXT_COLOR + "Host : " + r_message + RECEIVE_TEXT_COLOR);
+            System.out.print(SEND_TEXT_COLOR + "\n\n" + SEND_TEXT_COLOR);
+            
+            if (r_message.equals("exit"))
+              setUp.terminateConnection();
+          }
+          else {
+            // message rejected as the hashA and hashB aren't same
+            System.out.println(ERROR_TEXT_COLOR + "MESSAGE REJECTED" + ERROR_TEXT_COLOR);
+            System.out.println(SEND_TEXT_COLOR);
+          }
+          
         }
       }
 
       if (kb_bufferedReader.ready()) {
+        //System.out.println("Client : ");
         s_message = kb_bufferedReader.readLine();
-        setUp.sendEncryptedMessage(s_message);
+        setUp.sendMessage(s_message);
       }
             
 
       if (s_message.equals("exit"))
         break;
     }  
-    
+
+    System.out.println(DEFAULT_COLOR);
     setUp.terminateConnection();
 
   }

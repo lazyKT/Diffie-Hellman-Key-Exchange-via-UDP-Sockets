@@ -6,16 +6,26 @@
  */
 import java.io.BufferedReader;
 import java.io.DataInputStream;
-import java.io.PrintStream;
 
 
 class Host {
 
+  private static final String RECEIVE_TEXT_COLOR = "\u001B[36m"; // cyan
+  public static final String SEND_TEXT_COLOR = "\u001B[35m"; // purple
+  private static final String DEFAULT_COLOR = "\u001B[0m"; // default color
+  private static final String ERROR_TEXT_COLOR = "\u001B[31m"; // red
 
   public static void main(String[] args) throws Exception {
+
+    if (args.length == 0) {
+      System.out.println("Usage: java Host <port-number>");
+      System.exit(1);
+    }
+
+    int PORT  = Integer.parseInt(args[0]);
+
     
-    
-    SetUp setUp = new SetUp();
+    SetUp setUp = new SetUp(PORT);
     setUp.readConfigs();
     setUp.initConnection();
     setUp.performHandShake();
@@ -24,52 +34,44 @@ class Host {
 
     BufferedReader kb_bufferedReader = setUp.getKeyBoardBufferedReader();
     DataInputStream inputStream = setUp.getInputStream();
-    
-    // String s_message;
-
-    // while(setUp.isAlive()){
-
-    //   while ( !kb_bufferedReader.ready() ) {
-        
-    //     Thread.sleep(500);
-
-    //     // when background job is finished, aka the client terminates the connection
-    //     if (!setUp.isAlive())
-    //       setUp.terminateConnection();
-    //   }
-
-    //   s_message = kb_bufferedReader.readLine();
-    //   setUp.sendEncryptedMessage(s_message);
-      
-    //   if (s_message.equals("exit"))
-    //     break;
-    // }
-
+    System.out.print(SEND_TEXT_COLOR + "\n" + SEND_TEXT_COLOR);
     while (true) {
       String s_message = ""; 
       String r_message = "";
-
+      
       while ( !kb_bufferedReader.ready() ) {
 
         while ( inputStream.available() > 0 ) {
+          // receive message
+          r_message = setUp.receiveMessage();
+          if (r_message != null) {
 
-          r_message = setUp.receiveAndDecryptMessage();
-          System.out.println("Client : " + r_message);
+            System.out.print(RECEIVE_TEXT_COLOR + "Client : "+ r_message + RECEIVE_TEXT_COLOR);
+            System.out.print(SEND_TEXT_COLOR+"\n\n"+SEND_TEXT_COLOR);
 
-          if (r_message.equals("exit"))
-            setUp.terminateConnection();
+            if (r_message.equals("exit"))
+              setUp.terminateConnection();
+
+          }
+          else {
+            // reject message
+            System.out.println(ERROR_TEXT_COLOR + "MESSAGE REJECTED" + ERROR_TEXT_COLOR);
+            System.out.println(SEND_TEXT_COLOR);
+          }
         }
       }
 
       if (kb_bufferedReader.ready()) {
         s_message = kb_bufferedReader.readLine();
-        setUp.sendEncryptedMessage(s_message);
+        setUp.sendMessage(s_message);
       }
             
 
       if (s_message.equals("exit"))
         break;
     }
+
+    System.out.println(DEFAULT_COLOR);
 
     setUp.terminateConnection();
     

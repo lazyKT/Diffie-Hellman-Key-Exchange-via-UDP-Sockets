@@ -16,9 +16,9 @@ import java.math.BigInteger;
 
 public class ClientSetUp {
 
-    private final String secret = "ThisIsSecret123";
     private final String RECEIVE_TEXT_COLOR = "\u001B[36m"; // cyan
     private final String DEFAULT_COLOR = "\u001B[0m"; // default color
+    private final String ERROR_TEXT_COLOR = "\u001B[31m";
     private BigInteger P, G, X, Y, sharedKeyB;
     private Socket socket;
     private BufferedReader kb_bufferedReader; // read from keyboard input
@@ -30,7 +30,7 @@ public class ClientSetUp {
     public ClientSetUp(int Port) throws Exception {
 
         System.out.println("\nTrying to connect to the Server at PORT : " + Port + "...\\\n");
-        this.socket = new Socket(InetAddress.getLocalHost(), Port);
+        this.socket = new Socket("127.0.0.1",Port);
         System.out.println("Connected to the Host at PORT:" + Port);
 
         this.cipher = Cipher.getInstance("ARCFOUR");
@@ -38,40 +38,7 @@ public class ClientSetUp {
         this.kb_bufferedReader = new BufferedReader(new InputStreamReader(System.in));
         this.inputStream = new DataInputStream(this.socket.getInputStream());
 
-        generatSecretKey(sha1Hash());
-    }
-
-
-    // start thread
-    // public void run() {
-    //     try {
-
-    //         // listening to server and receive messages
-    //         // System.out.println("Listening to server on background thread!");
-    //         while(true) {
-    //             String receiveMessage = "";
-    //             if (this.inputStream.available() > 0) {
-    //                 receiveMessage = this.receiveAndDecryptMessage();
-    //                 System.out.println(this.RECEIVE_TEXT_COLOR + "Host : " + receiveMessage + this.RECEIVE_TEXT_COLOR);
-    //             }
-
-    //             if (receiveMessage.equals("exit"))
-    //                 break;
-    //         }
-        
-    //     }
-    //     catch (Exception e) {
-    //         throw new RuntimeException(e);
-    //     }
-    // }
-
-
-    public void init() throws Exception{
-        this.outputStream = new DataOutputStream(this.socket.getOutputStream());
-        this.kb_bufferedReader = new BufferedReader(new InputStreamReader(System.in));
-        this.inputStream = new DataInputStream(this.socket.getInputStream());
-
-        generatSecretKey(sha1Hash());
+        // generatSecretKey(sha1Hash(secret));
     }
 
 
@@ -85,17 +52,14 @@ public class ClientSetUp {
         (this.outputStream).writeBytes(s_string + "\n");
 
         // recive encrypted text from Host
-        System.out.println("\nPerforming First HandShake ...\\");
+        System.out.println("\nAuthenticating...\nPerforming First HandShake ...");
         
-        String decrypted_PGX = this.receiveAndDecryptMessage();
+        int message_len = (this.inputStream).readInt();
+        byte[] encrypted_message = new byte[message_len];
+        (this.inputStream).readFully(encrypted_message, 0, encrypted_message.length);
 
-        // Extract P, G and X from decrypted message
-        String[] dataSetPGX = decrypted_PGX.split(",");
-        if (dataSetPGX.length < 3)
-            throw new RuntimeException("Failed to get data during First HandShake .!");
-        this.P = new BigInteger(dataSetPGX[0]);
-        this.G = new BigInteger(dataSetPGX[1]);
-        this.X = new BigInteger(dataSetPGX[2]);
+        // first handshake: Password Authentication
+        this.performFirstHandShake(encrypted_message);
 
         // generating b
         Random random = new Random(System.currentTimeMillis());
@@ -106,12 +70,11 @@ public class ClientSetUp {
         // send Y to Host
         String strY = (this.Y).toString();
         this.sendEncryptedMessage(strY);
-        System.out.println("First HandShake Success!\n");
 
         // generate new Secret Key using Shared Key
         generatSecretKey(this.sharedKeyB.toString());
         
-        System.out.println("Performing Second HandShake ... |");
+        System.out.println("Performing Second HandShake ...");
         long nounceA = Long.parseLong(this.receiveAndDecryptMessage());
 
         // generate nounceB
@@ -122,23 +85,98 @@ public class ClientSetUp {
 
         String secondHandShakeResult = this.receiveAndDecryptMessage();
         if (secondHandShakeResult.equals("Login Failed")) {
+            this.outputStream.writeInt(403);
             System.out.println("\nHost : " + secondHandShakeResult);
             this.terminateConnection();
             return;
         }
         // System.out.println("Nounce B : " + nounceB);
         // System.out.println("Second HandShake Result " + secondHandShakeResult);
-        System.out.println("Second HandShake Success!\n");
-        System.out.println("Performing Final HandShake ... /");
+        System.out.println("Second HandShake Success!");
+        System.out.println("Performing Final HandShake ... ");
         if (Long.parseLong(secondHandShakeResult) != (nounceB + 1)) {
-            (this.outputStream).writeInt(403);
             System.out.println("\nCannot Establish Secure Channel with Host \n");
             this.terminateConnection();
         }
 
         System.out.println("Final HandShake Success!\n");
-        (this.outputStream).writeInt(200); // response to server or Host
-        System.out.println("Secure Channel Established ! :D\nYou can start to send message over secure channel.\nTry to type \"Hello Server\"\n");
+        this.outputStream.writeInt(200); // response to server or Host
+        System.out.println("Secure Channel Established ! :D\n\nYou can start to send message over secure channel.\nTry to type \"Hello Server\"\n");
+    }
+
+
+    private void performFirstHandShake(byte[] encrypted_message) throws Exception {
+
+        String[] datasetPGX = new String[3];
+        int retryCount = 0;
+        
+        do {
+            retryCount ++;
+            if (retryCount != 1) 
+                System.out.println(ERROR_TEXT_COLOR + "Wrong Password Entered ..." + ERROR_TEXT_COLOR);
+
+            if (retryCount > 3) {
+                System.out.println("Maximum Retry Count Exceeded.");
+                (this.outputStream).writeInt(403);
+                this.terminateConnection();
+            }
+    
+            String password = this.readPassword();
+            this.generatSecretKey(sha1Hash(password));
+            datasetPGX = this.decryptMessage(encrypted_message).split(",");
+        }
+        while(datasetPGX.length < 3);
+
+        this.P = new BigInteger(datasetPGX[0]);
+        this.G = new BigInteger(datasetPGX[1]);
+        this.X = new BigInteger(datasetPGX[2]);
+        this.outputStream.writeInt(200);
+        System.out.println(this.DEFAULT_COLOR + "\nFirst HandShake Successful!" + this.DEFAULT_COLOR);
+    }
+
+
+    // read password from console
+    private String readPassword() {
+        Console console = System.console();
+        System.out.println(this.DEFAULT_COLOR);
+        if (console == null ) {
+            System.out.println("Cannot get console instance ... ");
+            this.terminateConnection();
+        }
+
+        char[] pwdArray = console.readPassword("Password : ");
+        return new String(pwdArray);
+    }
+
+
+    // send message after successful handshake
+    public void sendMessage(String message) throws Exception{
+
+        String toHash = new String(this.sharedKeyB.toString() + message + this.sharedKeyB.toString());
+        String hash = sha1Hash(toHash);
+
+        // System.out.println("hash(H) : " + hash);
+        String cipherText = String.format("%s@KMK@%s", message, hash);
+
+        sendEncryptedMessage(cipherText);
+
+    }
+
+    // receive message after successful handshake
+    public String receiveMessage() throws Exception {
+
+        String cipherMessage = receiveAndDecryptMessage();
+
+        String r_message = cipherMessage.split("@KMK@")[0];
+        String hashA = cipherMessage.split("@KMK@")[1];
+
+        String toHash = new String((this.sharedKeyB).toString()+r_message+(this.sharedKeyB).toString());
+        String hashB = sha1Hash(toHash);
+
+        if (hashB.equals(hashA))
+            return r_message;
+        
+        return null;
     }
 
 
@@ -162,11 +200,11 @@ public class ClientSetUp {
     } 
 
 
-    private String sha1Hash() {
+    private String sha1Hash(String secret) {
 
         try {
             MessageDigest messageDigest = MessageDigest.getInstance("SHA-1");
-            byte[] secret_bytes = messageDigest.digest(this.secret.getBytes());
+            byte[] secret_bytes = messageDigest.digest(secret.getBytes());
             BigInteger signum_val = new BigInteger(1, secret_bytes);
 
             String hashed_secret = signum_val.toString();

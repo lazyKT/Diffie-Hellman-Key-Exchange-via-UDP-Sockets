@@ -11,10 +11,12 @@ import javax.crypto.spec.*;
 
 public class SetUp {
     
-    private static int PORT = 4455;
+    private int PORT;
     private final String CLIENT_TEXT_COLOR = "\u001B[36m"; // cyan
     private final String DEFAULT_COLOR = "\u001B[0m"; // default color
+    private final String ERROR_TEXT_COLOR = "\u001B[31m";
     private final String secret = "ThisIsSecret123";
+    private SocketAddress serverAddress;
     private ServerSocket serverSocket;
     private Socket socket;
     private DataOutputStream outputStream;
@@ -26,8 +28,9 @@ public class SetUp {
     private SecretKey secretKey;
 
 
-    public SetUp() throws Exception {
+    public SetUp(int PORT) throws Exception {
 
+        this.PORT = PORT;
         this.showText("\nCreating New Server ... /", "info");
         Random random = new Random(System.currentTimeMillis());
         
@@ -88,7 +91,10 @@ public class SetUp {
         
         try {
             this.showText("\nCreating New Socket Connection ... \\\n", "info");
-            this.serverSocket = new ServerSocket(4455);
+            this.serverAddress = new InetSocketAddress("127.0.0.1", this.PORT);
+            this.serverSocket = new ServerSocket();
+            this.serverSocket.bind(this.serverAddress);
+            this.showServerInfo();
             System.out.println("Waiting for the client to connect ... |\n");
             this.socket = serverSocket.accept();
             this.showText(String.format("Socket Connection Established. Listening at PORT:%d\n", PORT), "info");
@@ -109,6 +115,14 @@ public class SetUp {
     }
 
 
+    // show server information: for debug
+    public void showServerInfo() {
+        System.out.println("Server IP Address : " + this.serverSocket.getInetAddress());
+        System.out.println("Server Local Socket Address : " + this.serverSocket.getLocalSocketAddress());
+        System.out.println("Server Local Port : " + this.serverSocket.getLocalPort());
+    }
+
+
     public BufferedReader getKeyBoardBufferedReader() { return this.kb_bufferedReader; }
     public DataInputStream getInputStream() { return this.inputStream; }
 
@@ -120,8 +134,8 @@ public class SetUp {
 
         if (r_message != null && (r_message.toLowerCase()).equals("bob") ) {
             // perform handshake
-            System.out.println("Client Username : " + r_message);
-            System.out.println("\nPerforming first handshake .... /\n");
+            System.out.println(r_message + " joined");
+            System.out.println("\nAuthenticating "+r_message+" ...\nPerforming first handshake .... /");
 
             Random rand = new Random(System.currentTimeMillis());
             int a = rand.nextInt(999);
@@ -131,10 +145,21 @@ public class SetUp {
             // send P, G, X 
             this.sendEncryptedMessage(firstHandShakeStr);
             
+            // wait for the client to enter password
+            while(this.inputStream.available()<1);
+
+            // read client response: 200 for Pass and 403 for failed
+            int firstHandShakeResponse = this.inputStream.readInt();
+            
+            if (firstHandShakeResponse == 403 ) {
+                System.out.println(this.ERROR_TEXT_COLOR + "\nClient Login Failed" + this.ERROR_TEXT_COLOR);
+                this.terminateConnection();
+            }
+
             // receive Y
             String decrypted_Y = this.receiveAndDecryptMessage();
             this.Y = new BigInteger(decrypted_Y);
-            System.out.println("First HandShake Success!\n");
+            System.out.println("First HandShake Success!");
 
             this.sharedKeyA = this.findModulo(Y, a);
 
@@ -142,7 +167,7 @@ public class SetUp {
             generateSecretKey((this.sharedKeyA).toString());
 
             long nounceA = System.nanoTime();
-            System.out.println("Performing Second HandShake ... |\n");
+            System.out.println("Performing Second HandShake ...");
 
             // send nounceA
             sendEncryptedMessage(String.valueOf(nounceA));
@@ -162,21 +187,53 @@ public class SetUp {
                 (this.kb_bufferedReader).readLine();
                 this.terminateConnection();
             }
-            System.out.println("Second HandShake Success!\n");
-            System.out.println("Performing Final HandShake ... /\n");
+            System.out.println("Second HandShake Success!");
+            System.out.println("Performing Final HandShake ...");
             // send nounceB
             sendEncryptedMessage(String.valueOf(nounceB + 1));
             
             int finalHandShakeResult = (this.inputStream).readInt();
 
             if (finalHandShakeResult == 200) {
-                System.out.println("Final HandShake Success!\n");
-                System.out.println("Secure Channel Established! :)\nYou can start to send message over secure channel.\nTry to type \"Hello Client\"\n");
+                System.out.println("Final HandShake Success!");
+                System.out.println("Secure Channel Established! :)\n\nYou can start to send message over secure channel.\nTry to type \"Hello Client\"\n");
             }
         }
 
+    }  
+
+
+    // send message after successful handshake
+    public void sendMessage(String message) throws Exception{
+
+        String toHash = new String(this.sharedKeyA.toString() + message + this.sharedKeyA.toString());
+        String hash = sha1Hash(toHash);
+
+        // System.out.println("hash(H) : " + hash);
+        String cipherText = String.format("%s@KMK@%s", message, hash);
+
+        sendEncryptedMessage(cipherText);
+
     }
 
+    // receive message after successful handshake
+    public String receiveMessage() throws Exception {
+
+        String cipherMessage = receiveAndDecryptMessage();
+
+        String r_message = cipherMessage.split("@KMK@")[0];
+        String hashA = cipherMessage.split("@KMK@")[1];
+
+        String toHashB = new String(this.sharedKeyA.toString()+r_message+this.sharedKeyA.toString());
+        String hashB = sha1Hash(toHashB);
+
+        // accept message
+        if (hashB.equals(hashA))
+            return r_message;
+        
+        // reject message
+        return null;
+    }   
 
     /**
      * Hash Password using SHA-1 algorithm: Length - 64bits
