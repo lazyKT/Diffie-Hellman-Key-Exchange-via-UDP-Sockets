@@ -1,4 +1,4 @@
-# UDP-Sockets-with-Diffie-Hellman-Key-Exchange
+# Diffie-Hellman-Key-Exchange-via-UDP-Sockets
 Implementing and Establishing the secure channel between two parties using Diffie-Hellman Key Exchange
 
 - Alice stands for Host(Server)
